@@ -1,6 +1,5 @@
 name: Test Docker Build
 
-# Controls when the workflow will run
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -21,8 +20,9 @@ jobs:
       matrix:
         parent_repo: [umd_darknet]
         stage: [dev_stage, prod_stage]
-    uses: umdlife/umd_workflows/.github/workflows/rebuild_docker.yaml@main
+    uses: umdlife/umd_workflows/.github/workflows/rebuild_docker_dep.yaml@main
     with:
+      repository: ${{ matrix.parent_repo }}
       arch: linux/amd64
       stage: ${{ matrix.stage }}
       push: true
