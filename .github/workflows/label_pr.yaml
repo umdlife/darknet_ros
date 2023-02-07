@@ -1,0 +1,13 @@
+name: Label PR
+
+# Controls when the workflow will run
+on:
+  pull_request:
+    types: [opened]
+permissions:
+      contents: write
+jobs:
+  label_pr:
+    uses: umdlife/umd_workflows/.github/workflows/label_pr.yaml@main
+    secrets:
+      PAT: ${{ secrets.UMDLIFEDEV_TOKEN }}
