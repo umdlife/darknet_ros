@@ -55,6 +55,7 @@ YoloObjectDetector::YoloObjectDetector()
   declare_parameter("video_stream", std::string(""));
 
   declare_parameter("gstreamer_writer_pipeline", std::string("default"));
+  declare_parameter("gstreamer_reader_pipeline", std::string("default"));
 }
 
 YoloObjectDetector::~YoloObjectDetector()
@@ -136,7 +137,16 @@ void YoloObjectDetector::init()
   std::string video_stream;
   get_parameter("video_stream", video_stream);
   std::cout << "video_stream: " << video_stream << std::endl;
-  rtsp_streamer_.on_configure_reader(std::bind(&YoloObjectDetector::on_image_callback, this, std::placeholders::_1), video_stream);
+  std::string reader_pipeline;
+  get_parameter("gstreamer_reader_pipeline", reader_pipeline);
+  if(reader_pipeline == "default")
+  {
+    rtsp_streamer_.on_configure_reader(std::bind(&YoloObjectDetector::on_image_callback, this, std::placeholders::_1), video_stream);
+  }
+  else
+  {
+    rtsp_streamer_.on_configure_reader(std::bind(&YoloObjectDetector::on_image_callback, this, std::placeholders::_1), reader_pipeline, video_stream);
+  }
 }
 
 void YoloObjectDetector::on_image_callback(const cv::Mat& image)
