@@ -364,7 +364,8 @@ void YoloObjectDetector::yolo()
     generate_image_cp(buff_[(buffIndex_ + 1)%3], disp_);
     if (writer_configured_)
     {
-      writer_configured_ = rtsp_streamer_.publish_rtsp_stream(disp_);
+      cv::cvtColor(disp_, disp_, cv::COLOR_BGR2RGB);
+      writer_configured_ = rtsp_streamer_.publish_rtsp_stream(disp_.data, disp_.total()*disp_.channels());
     }
       
     fetch_thread.join();
