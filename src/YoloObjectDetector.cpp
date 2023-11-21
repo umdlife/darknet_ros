@@ -161,8 +161,7 @@ void YoloObjectDetector::on_image_callback(const cv::Mat& image)
       std::cout << "gstreamer_writer_pipeline: " << gstreamer_writer_pipeline << std::endl;
       int fps;
       get_parameter("gstreamer_writer_framerate", fps);
-      rtsp_streamer_.on_configure_writer(gstreamer_writer_pipeline, frameWidth_, frameHeight_, fps);
-      writer_configured_ = true;
+      writer_configured_ = rtsp_streamer_.on_configure_writer(gstreamer_writer_pipeline, frameWidth_, frameHeight_, fps);
     }
   }
 }
@@ -363,7 +362,10 @@ void YoloObjectDetector::yolo()
     detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
     
     generate_image_cp(buff_[(buffIndex_ + 1)%3], disp_);
-    rtsp_streamer_.publish_rtsp_stream(disp_);
+    if (writer_configured_)
+    {
+      writer_configured_ = rtsp_streamer_.publish_rtsp_stream(disp_);
+    }
       
     fetch_thread.join();
     detect_thread.join();
