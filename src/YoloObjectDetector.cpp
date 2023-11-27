@@ -54,7 +54,8 @@ YoloObjectDetector::YoloObjectDetector()
   declare_parameter("config_path", std::string("/default"));
   declare_parameter("video_stream", std::string(""));
 
-  declare_parameter("gstreamer_writer_pipeline", std::string("default"));
+  declare_parameter("gstreamer_writer_pipeline", std::string(""));
+  declare_parameter("gstreamer_writer_framerate", 20);
 }
 
 YoloObjectDetector::~YoloObjectDetector()
@@ -155,30 +156,12 @@ void YoloObjectDetector::on_image_callback(const cv::Mat& image)
     if (!writer_configured_)
     {
       // Check whether a GStreamer pipeline has been provided
-      std::string gstreamer_pipeline;
-      get_parameter("gstreamer_writer_pipeline", gstreamer_pipeline);
-      std::cout << "gstreamer_writer_pipeline: " << gstreamer_pipeline << std::endl;
-      if (gstreamer_pipeline != "default")
-      {
-        rtsp_streamer_.on_configure_writer(gstreamer_pipeline, frameWidth_, frameHeight_);
-      }
-      else
-      {
-        std::string darknet_namespace(this->get_namespace());
-        std::string server_ip, server_url;
-        // Try to read the RTSP server IP as an environment variable
-        if (utility::safe_getenv("RTSP_SERVER_IP", server_ip))
-        {
-          server_url = "rtsp://" + server_ip + ":8554" + darknet_namespace;
-        }
-        else
-        {
-          server_url = "rtsp://127.0.0.1:8554" + darknet_namespace;
-        }
-        std::cout << "UL-VA streaming URL: " << server_url << std::endl;
-        rtsp_streamer_.on_configure_writer(frameWidth_, frameHeight_, 30, 9000, server_url);
-      }
-      writer_configured_ = true;
+      std::string gstreamer_writer_pipeline;
+      get_parameter("gstreamer_writer_pipeline", gstreamer_writer_pipeline);
+      std::cout << "gstreamer_writer_pipeline: " << gstreamer_writer_pipeline << std::endl;
+      int fps;
+      get_parameter("gstreamer_writer_framerate", fps);
+      writer_configured_ = rtsp_streamer_.on_configure_writer(gstreamer_writer_pipeline, frameWidth_, frameHeight_, fps);
     }
   }
 }
@@ -379,7 +362,11 @@ void YoloObjectDetector::yolo()
     detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
     
     generate_image_cp(buff_[(buffIndex_ + 1)%3], disp_);
-    rtsp_streamer_.publish_rtsp_stream(disp_);
+    if (writer_configured_)
+    {
+      cv::cvtColor(disp_, disp_, cv::COLOR_BGR2RGB);
+      writer_configured_ = rtsp_streamer_.publish_rtsp_stream(disp_.data, disp_.total()*disp_.channels());
+    }
       
     fetch_thread.join();
     detect_thread.join();

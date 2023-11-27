@@ -116,30 +116,20 @@ find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
 find_package(umd_rtsp REQUIRED)
-find_package(umd_http REQUIRED)
-find_package(nlohmann_json REQUIRED)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-# find_package(rclpy REQUIRED)
-# find_package(rclcpp_action REQUIRED)
 find_package(std_msgs REQUIRED)
-# find_package(image_transport REQUIRED)
 find_package(vision_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
-# find_package(darknet_ros_msgs REQUIRED)
 
 set(dependencies
     rclcpp
-    # rclpy
-    # rclcpp_action
     std_msgs
-    # image_transport
     vision_msgs
     cv_bridge
     sensor_msgs
-    # darknet_ros_msgs
     ament_index_cpp
 )
 
@@ -291,11 +281,6 @@ target_link_libraries(${PROJECT_NAME}_lib
   pthread
   stdc++
   umd_rtsp::umd_rtsp
-  umd_http::umd_http
-  nlohmann_json::nlohmann_json
-  -lcrypto
-  -lssl
-  -lcpprest
   ${OpenCV_LIBRARIES}
   ${catkin_LIBRARIES}
   ${OpenCV_LIBS}

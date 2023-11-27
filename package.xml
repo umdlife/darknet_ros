@@ -14,20 +14,12 @@
   
   <depend>rcl</depend>
   <depend>rclcpp</depend>
-  <!-- <depend>rclpy</depend> -->
-  <!-- <depend>rclcpp_action</depend> -->
-  <!-- <depend>image_transport</depend> -->
   <depend>vision_msgs</depend>
   <depend>std_msgs</depend>
   <depend>cv_bridge</depend>
   <depend>sensor_msgs</depend>
   <depend>ament_index_cpp</depend>
-  <!-- <depend>darknet_ros_msgs</depend> -->
   <depend>umd_rtsp</depend>
-  <depend>umd_http</depend>
-  <depend>nlohmann_json</depend>
-  
-  
 
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_lint_auto</test_depend>
