@@ -148,6 +148,7 @@ include_directories(
 set(PROJECT_LIB_FILES
     src/YoloObjectDetector.cpp                    src/image_interface.cpp
     src/yolo_object_detector_node.cpp
+    src/slicing.cpp
 )
 
 set(DARKNET_CORE_FILES
@@ -204,6 +205,54 @@ if (CUDA_FOUND)
 
   link_directories(
     ${CUDA_TOOLKIT_ROOT_DIR}/lib64
+  )
+
+  # add main
+  cuda_add_library(main_lib
+    src/main.cpp
+    ${DARKNET_CORE_FILES}
+    ${DARKNET_CUDA_FILES}
+  )
+
+  ament_target_dependencies(main_lib ${dependencies})
+
+  if(CUDNN_FOUND)
+    if(ENABLE_CUDNN_HALF)
+      target_link_libraries(main_lib
+        cuda
+        cudart
+        cublas
+        curand
+        CuDNN::CuDNN
+      )
+      target_compile_definitions(main_lib PRIVATE
+        -DCUDNN
+        -DCUDNN_HALF
+      )
+    else()
+      target_link_libraries(main_lib
+        cuda
+        cudart
+        cublas
+        curand
+        CuDNN::CuDNN
+      )
+      target_compile_definitions(main_lib PRIVATE
+        -DCUDNN
+      )
+    endif()
+  else()
+    target_link_libraries(main_lib
+      cuda
+      cudart
+      cublas
+      curand
+    )
+  endif()
+
+  cuda_add_executable(main
+    src/main.cpp
+    src/slicing.cpp
   )
 
   cuda_add_library(${PROJECT_NAME}_lib
@@ -267,6 +316,16 @@ else()
   )
   ament_target_dependencies(${PROJECT_NAME} ${dependencies})
 
+  # main target
+  add_library(main_lib src/main.cpp
+    ${DARKNET_CORE_FILES}
+  )
+  ament_target_dependencies(main_lib ${dependencies})
+  target_link_compile_definitions(main_lib PRIVATE -DOPENCV)
+
+  add_executable(main src/main.cpp)
+  ament_target_dependencies(main ${dependencies})
+
 endif()
 
 find_package(OpenMP)
@@ -292,7 +351,28 @@ target_link_libraries(${PROJECT_NAME}
 )
 target_compile_definitions(${PROJECT_NAME} PRIVATE -DOPENCV)
 
-install(TARGETS ${PROJECT_NAME}_lib ${PROJECT_NAME}
+
+# main
+
+target_link_libraries(main_lib
+  m
+  pthread
+  stdc++
+  umd_rtsp::umd_rtsp
+  ${OpenCV_LIBRARIES}
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBS}
+)
+
+target_link_libraries(main
+  main_lib
+)
+
+
+target_compile_definitions(main_lib PRIVATE -DOPENCV)
+target_compile_definitions(main PRIVATE -DOPENCV) 
+
+install(TARGETS ${PROJECT_NAME}_lib ${PROJECT_NAME} main
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
@@ -414,7 +494,7 @@ install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME}/)
 
 
 ament_export_include_directories(include)
-ament_export_libraries(${PROJECT_NAME}_lib)
+ament_export_libraries(${PROJECT_NAME}_lib main_lib)
 ament_export_dependencies(${dependencies})
 
 ament_package()

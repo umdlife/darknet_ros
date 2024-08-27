@@ -37,6 +37,7 @@
 #include <opencv2/objdetect/objdetect.hpp>
 #include <cv_bridge/cv_bridge.h>
 
+
 // C++
 #include <iostream>
 #include <string>
@@ -63,6 +64,7 @@ extern "C" {
 #include "darknet.h"
 
 #include "image_interface.hpp"
+#include "slicing.hpp"
 
 #define START_COUNT 100
 
@@ -72,6 +74,9 @@ extern "C" {
 extern "C" cv::Mat image_to_mat(image im);
 extern "C" image mat_to_image(cv::Mat m);
 extern "C" void generate_image(image p, cv::Mat& disp);
+typedef std::vector<image> ImageVector;
+typedef std::vector<float> FloatVector;
+typedef std::vector<FloatVector> FloatVector2D;
 
 namespace darknet_ros {
 namespace utility
@@ -137,6 +142,13 @@ class YoloObjectDetector : public rclcpp::Node
   int frameWidth_;
   int frameHeight_;
 
+
+  // slicing
+  bool do_slicing_{false};
+
+  // define the slicing as a shared pointer
+  std::shared_ptr<darknet_ros::Slicing> slicing_;
+
   //! Publisher of the bounding box image.
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr detectionImagePublisher_;
 
@@ -151,6 +163,9 @@ class YoloObjectDetector : public rclcpp::Node
   network *net_;
   image buff_[3];
   image buffLetter_[3];
+  std::vector<ImageVector> sliced_buff_; 
+  std::vector<FloatVector2D> starting_points_; 
+  std::vector<ImageVector> sliced_buffLetter_; 
   int buffId_[3];
   int buffIndex_ = 0;
   cv::Mat disp_;
