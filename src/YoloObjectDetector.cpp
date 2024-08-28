@@ -43,6 +43,9 @@ YoloObjectDetector::YoloObjectDetector()
       classLabels_(0)
 {
   RCLCPP_INFO(get_logger(), "[YoloObjectDetector] Node started.");
+  sliced_buff_.resize(3);
+  starting_points_.resize(3);
+  sliced_buffLetter_.resize(3);
 
   declare_parameter("network.detection_classes", std::vector<std::string>(0));
 
@@ -56,6 +59,11 @@ YoloObjectDetector::YoloObjectDetector()
 
   declare_parameter("gstreamer_writer_pipeline", std::string(""));
   declare_parameter("gstreamer_writer_framerate", 20);
+  declare_parameter("network.slicing", false);
+  declare_parameter("network.slicing_height", 256);
+  declare_parameter("network.slicing_width", 256);
+  declare_parameter("network.slicing_overlap_height_ratio", 0.2);
+  declare_parameter("network.slicing_overlap_width_ratio", 0.2);
 }
 
 YoloObjectDetector::~YoloObjectDetector()
@@ -129,6 +137,21 @@ void YoloObjectDetector::init()
                 0, 0, 1, 0.5, 0, 0, 0);
   yoloThread_ = std::thread(&YoloObjectDetector::yolo, this);
 
+  // get slicing parameters
+  get_parameter("network.slicing", do_slicing_);
+  if(do_slicing_) {
+    RCLCPP_INFO(get_logger(), "Slicing is enabled.");
+    int slice_height;
+    int slice_width;
+    double slice_overlap_height_ratio;
+    double slice_overlap_width_ratio;
+    get_parameter("network.slicing_height", slice_height);
+    get_parameter("network.slicing_width", slice_width);
+    get_parameter("network.slicing_overlap_height_ratio", slice_overlap_height_ratio);
+    get_parameter("network.slicing_overlap_width_ratio", slice_overlap_width_ratio);
+    slicing_ = std::make_shared<darknet_ros::Slicing>(slice_height, slice_width, slice_overlap_height_ratio, slice_overlap_width_ratio, 1, false);
+  }
+
   // Initialize publisher and subscriber.
   // Ouput topic ~/detections [vision_msgs/msg/Detection2DArray]
   detections_pub_ = this->create_publisher<vision_msgs::msg::Detection2DArray>(
@@ -144,6 +167,11 @@ void YoloObjectDetector::on_image_callback(const cv::Mat& image)
 {
   if (!image.empty()) {
     {
+      // check if the width and height has changed if so, reconfigure the writer
+      if (frameWidth_ != image.cols || frameHeight_ != image.rows)
+      {
+        writer_configured_ = false;
+      }
       std::unique_lock<std::shared_mutex> lockImageCallback(mutexImageCallback_);
       camImageCopy_ = image.clone();
     }
@@ -224,6 +252,37 @@ void *YoloObjectDetector::detectInThread()
   detection *dets = 0;
   int nboxes = 0;
   dets = avgPredictions(net_, &nboxes);
+  if(do_slicing_)
+  {
+    int buff_index = (buffIndex_ + 2) % 3;
+    #pragma omp parallel for
+    for(int i = 0; i < sliced_buff_[buff_index].size(); i++)
+    {
+      
+      float *X = sliced_buffLetter_[buff_index][i].data;
+      float *prediction = network_predict(*net_, X);
+      
+      detection *dets_sliced_image = 0;
+      int nboxes_sliced_image = 0;
+      dets_sliced_image =  get_network_boxes(net_, sliced_buffLetter_[buff_index][0].w, sliced_buffLetter_[buff_index][0].h, demoThresh_, demoHier_, 0, 1, &nboxes_sliced_image, 1);
+      
+      // transform the detection boxes to the original image
+      for(int j = 0; j < nboxes_sliced_image; j++)
+      {
+        slicing_->transform_prediction_point_to_original_image(starting_points_[buff_index][i], sliced_buff_[buff_index][i], buff_[buff_index], dets_sliced_image[j].bbox);
+      }
+      
+      // append the detections to the main detections
+      #pragma omp critical 
+      {
+        dets = (detection*)realloc(dets, (nboxes + nboxes_sliced_image) * sizeof(detection));
+        memcpy(dets + nboxes, dets_sliced_image, nboxes_sliced_image * sizeof(detection));
+        nboxes += nboxes_sliced_image;
+        free_detections(dets_sliced_image, nboxes_sliced_image);   
+      }   
+    }
+
+  }
 
   if (nms > 0) do_nms_obj(dets, nboxes, l.classes, nms);
 
@@ -272,6 +331,16 @@ void* YoloObjectDetector::fetchInThread() {
   }
   rgbgr_image(buff_[buffIndex_]);
   letterbox_image_into(buff_[buffIndex_], net_->w, net_->h, buffLetter_[buffIndex_]);
+  if(do_slicing_)
+  {
+    slicing_->get_sliced_images(buff_[buffIndex_], sliced_buff_[buffIndex_], starting_points_[buffIndex_]);
+    sliced_buffLetter_[buffIndex_].resize(sliced_buff_[buffIndex_].size());
+    #pragma omp parallel for
+    for(int i = 0; i < sliced_buff_[buffIndex_].size(); i++)
+    {
+      letterbox_image_into(sliced_buff_[buffIndex_][i], net_->w, net_->h, sliced_buffLetter_[buffIndex_][i]);
+    }
+  }
   return 0;
 }
 
@@ -351,6 +420,23 @@ void YoloObjectDetector::yolo()
   buffLetter_[1] = letterbox_image(buff_[0], net_->w, net_->h);
   buffLetter_[2] = letterbox_image(buff_[0], net_->w, net_->h);
   disp_ = image_to_mat(buff_[0]);
+  if(do_slicing_)
+  {
+    slicing_->get_sliced_images(buff_[0], sliced_buff_[0], starting_points_[0]);
+    sliced_buff_[1] = sliced_buff_[0];
+    sliced_buff_[2] = sliced_buff_[0];
+    sliced_buffLetter_[0].resize(sliced_buff_[0].size());
+    sliced_buffLetter_[1].resize(sliced_buff_[1].size());
+    sliced_buffLetter_[2].resize(sliced_buff_[2].size());
+    for(int i = 0; i < sliced_buff_[0].size(); i++)
+    {
+      sliced_buffLetter_[0][i] = letterbox_image(sliced_buff_[0][i], net_->w, net_->h);
+      sliced_buffLetter_[1][i] = letterbox_image(sliced_buff_[1][i], net_->w, net_->h);
+      sliced_buffLetter_[2][i] = letterbox_image(sliced_buff_[2][i], net_->w, net_->h);
+    }
+    starting_points_[1] = starting_points_[0];
+    starting_points_[2] = starting_points_[0];
+  }
 
   int count = 0;
 
